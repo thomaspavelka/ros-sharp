@@ -18,6 +18,7 @@ using RosSharp.RosBridgeClient;
 using std_msgs = RosSharp.RosBridgeClient.MessageTypes.Std;
 using std_srvs = RosSharp.RosBridgeClient.MessageTypes.Std;
 using rosapi = RosSharp.RosBridgeClient.MessageTypes.Rosapi;
+using RosSharp.RosBridgeClient.MessageTypes.Moveit;
 
 
 // commands on ROS system:
@@ -33,13 +34,46 @@ namespace RosSharp.RosBridgeClientTest
 {
     public class RosSocketConsole
     {
-        static readonly string uri = "ws://192.168.56.102:9090";
+        static readonly string uri = "ws://172.25.23.48:9090";
 
         public static void Main(string[] args)
         {
             //RosSocket rosSocket = new RosSocket(new RosBridgeClient.Protocols.WebSocketSharpProtocol(uri));
             RosSocket rosSocket = new RosSocket(new RosBridgeClient.Protocols.WebSocketNetProtocol(uri));
 
+            ServiceCheck(rosSocket);
+
+            Console.WriteLine("Press any key to close...");
+            Console.ReadKey(true);
+            rosSocket.Close();
+        }
+
+        public static void ServiceCheck(RosSocket rosSocket)
+        {
+            // Create a PositionIKRequest object
+            PositionIKRequest positionIKRequest2 = new PositionIKRequest();
+
+            positionIKRequest2.group_name = "panda_arm";
+            //positionIKRequest2.pose_stamped.header.frame_id = "panda_link0";
+
+            positionIKRequest2.pose_stamped.pose.position.x = 0.5;
+            positionIKRequest2.pose_stamped.pose.position.y = 0.0;
+            positionIKRequest2.pose_stamped.pose.position.z = 0.5;
+
+            positionIKRequest2.pose_stamped.pose.orientation.x = 0.0;
+            positionIKRequest2.pose_stamped.pose.orientation.y = 0.0;
+            positionIKRequest2.pose_stamped.pose.orientation.z = 0.0;
+            positionIKRequest2.pose_stamped.pose.orientation.w = 1.0;
+
+            // Create a GetPositionIKRequest object
+            GetPositionIKRequest getPositionIKRequest = new GetPositionIKRequest(positionIKRequest2);
+
+            // Call ROS service
+            rosSocket.CallService<GetPositionIKRequest, GetPositionIKResponse>("/compute_ik", ServiceCallHandlerCheckIK, getPositionIKRequest);
+        }
+
+        public static void OriginalExample(RosSocket rosSocket)
+        {
             // Publication:
             std_msgs.String message = new std_msgs.String
             {
@@ -64,11 +98,8 @@ namespace RosSharp.RosBridgeClientTest
             rosSocket.Unadvertise(publication_id);
             rosSocket.Unsubscribe(subscription_id);
             rosSocket.UnadvertiseService(service_id);
-
-            Console.WriteLine("Press any key to close...");
-            Console.ReadKey(true);
-            rosSocket.Close();
         }
+
         private static void SubscriptionHandler(std_msgs.String message)
         {
             Console.WriteLine((message).data);
@@ -83,6 +114,12 @@ namespace RosSharp.RosBridgeClientTest
         {
             result = new std_srvs.TriggerResponse(true, "service response message");
             return true;
+        }
+
+        private static void ServiceCallHandlerCheckIK(GetPositionIKResponse message)
+        {
+            Console.WriteLine("Position: " + message.solution.joint_state.ToString());
+            Console.WriteLine("Error Code: " + message.error_code.ToString());
         }
     }
 }
