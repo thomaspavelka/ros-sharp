@@ -19,6 +19,10 @@ using std_msgs = RosSharp.RosBridgeClient.MessageTypes.Std;
 using std_srvs = RosSharp.RosBridgeClient.MessageTypes.Std;
 using rosapi = RosSharp.RosBridgeClient.MessageTypes.Rosapi;
 using RosSharp.RosBridgeClient.MessageTypes.Moveit;
+using System.Threading.Tasks;
+using RosSharp.RosBridgeClient.MessageTypes.Geometry;
+using System.Collections.Generic;
+using RosSharp.RosBridgeClient.MessageTypes.Std;
 
 
 // commands on ROS system:
@@ -36,12 +40,23 @@ namespace RosSharp.RosBridgeClientTest
     {
         static readonly string uri = "ws://172.25.23.48:9090";
 
+        static bool IsServiceCheckCompleted;
+
         public static void Main(string[] args)
         {
             //RosSocket rosSocket = new RosSocket(new RosBridgeClient.Protocols.WebSocketSharpProtocol(uri));
             RosSocket rosSocket = new RosSocket(new RosBridgeClient.Protocols.WebSocketNetProtocol(uri));
 
+            IsServiceCheckCompleted = false;
+
             ServiceCheck(rosSocket);
+
+            // Use a while loop to continuously check the completion status of ServiceCheck
+            while (!IsServiceCheckCompleted)
+            {
+                // Optionally, you can add a small delay to avoid busy-waiting
+                System.Threading.Thread.Sleep(100);
+            }
 
             Console.WriteLine("Press any key to close...");
             Console.ReadKey(true);
@@ -51,25 +66,40 @@ namespace RosSharp.RosBridgeClientTest
         public static void ServiceCheck(RosSocket rosSocket)
         {
             // Create a PositionIKRequest object
-            PositionIKRequest positionIKRequest2 = new PositionIKRequest();
+            PositionIKRequest positionIKRequest = new PositionIKRequest();
 
-            positionIKRequest2.group_name = "panda_arm";
+            positionIKRequest.group_name = "panda_arm";
+            positionIKRequest.robot_state.is_diff = true;
             //positionIKRequest2.pose_stamped.header.frame_id = "panda_link0";
 
-            positionIKRequest2.pose_stamped.pose.position.x = 0.5;
-            positionIKRequest2.pose_stamped.pose.position.y = 0.0;
-            positionIKRequest2.pose_stamped.pose.position.z = 0.5;
+            positionIKRequest.pose_stamped.pose.position.x = 0.5;
+            positionIKRequest.pose_stamped.pose.position.y = 0.0;
+            positionIKRequest.pose_stamped.pose.position.z = 0.5;
 
-            positionIKRequest2.pose_stamped.pose.orientation.x = 0.0;
-            positionIKRequest2.pose_stamped.pose.orientation.y = 0.0;
-            positionIKRequest2.pose_stamped.pose.orientation.z = 0.0;
-            positionIKRequest2.pose_stamped.pose.orientation.w = 1.0;
+            positionIKRequest.pose_stamped.pose.orientation.x = 0.0;
+            positionIKRequest.pose_stamped.pose.orientation.y = 0.0;
+            positionIKRequest.pose_stamped.pose.orientation.z = 0.0;
+            positionIKRequest.pose_stamped.pose.orientation.w = 1.0;
 
             // Create a GetPositionIKRequest object
-            GetPositionIKRequest getPositionIKRequest = new GetPositionIKRequest(positionIKRequest2);
+            GetPositionIKRequest getPositionIKRequest = new GetPositionIKRequest(positionIKRequest);
 
             // Call ROS service
             rosSocket.CallService<GetPositionIKRequest, GetPositionIKResponse>("/compute_ik", ServiceCallHandlerCheckIK, getPositionIKRequest);
+        }
+
+        private static void ServiceCallHandlerCheckIK(GetPositionIKResponse message)
+        {
+            double[] jointPositions = message.solution.joint_state.position;
+
+            Console.WriteLine("Joint Positions:");
+            for (int i = 0; i < jointPositions.Length; i++)
+            {
+                Console.WriteLine($"Joint {i + 1}: {jointPositions[i]}");
+            }
+
+            Console.WriteLine("Error Code: " + message.error_code.val.ToString());
+            IsServiceCheckCompleted = true;
         }
 
         public static void OriginalExample(RosSocket rosSocket)
@@ -116,10 +146,32 @@ namespace RosSharp.RosBridgeClientTest
             return true;
         }
 
-        private static void ServiceCallHandlerCheckIK(GetPositionIKResponse message)
+
+        public List<PoseStamped> GeneratePoses(int numberOfPoses, double radius)
         {
-            Console.WriteLine("Position: " + message.solution.joint_state.ToString());
-            Console.WriteLine("Error Code: " + message.error_code.ToString());
+            List<PoseStamped> poses = new List<PoseStamped>();
+
+            for (int i = 0; i < numberOfPoses; i++)
+            {
+                double angle = (2 * Math.PI * i) / numberOfPoses;
+                double x = radius * Math.Cos(angle);
+                double y = radius * Math.Sin(angle);
+
+                // Create PoseStamped message
+                PoseStamped pose = new PoseStamped
+                {
+                    header = new Header { frame_id = "panda_link0" },
+                    pose = new Pose
+                    {
+                        position = new Point { x = x, y = y, z = 0 },
+                        orientation = new Quaternion { x = 0, y = 0, z = 0, w = 1 }
+                    }
+                };
+
+                poses.Add(pose);
+            }
+
+            return poses;
         }
     }
 }
